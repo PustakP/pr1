@@ -1,0 +1,23 @@
+
+**What the handoff file covers**
+- **Project and papers:** the project summary, what each of the five papers contributes, and the three problems with our three changes. Each change carries its sanity-check verdict.
+- **Progress:** what we built (the deck, the code, the demo) and what has actually been tested.
+- **Gaps:** nine gaps in the code that have to be fixed before any number is reported.
+- **Future work:** a staged plan where every stage ends in a table you can compare against the DTMIR-Pro paper's reported numbers.
+- **Next steps:** the first five tasks and the list of files to re-upload.
+
+**The comparable-progress part**
+- **Stage A:** reproduce the baseline on the paper's datasets and put your number next to its published ones.
+- **Stage B:** the core result, a 5-row ablation. It runs baseline, then each change alone, then all three together. That table answers which problems were actually worth solving, including the case where the routing change barely helps.
+- **Later stages:** mixed-weather evidence, then your advisor's two extensions as extra rows, then the write-up.
+
+**Things I found while compiling that you should know**
+- **Missing checkpoint load:** `train.py` doesn't load the stage-1 translator checkpoint yet, so stage 2 starts from a fresh translator.
+- **Parameter count:** the full-size model is about 13M parameters against the paper's 3.9M.
+- **Slide attributions:** two claims on the slides are too loose. First, MIRAGE doesn't do stream routing; it only offers the covariance-similarity idea. Second, the "every paper avoids freezing" line for Change 2 isn't accurate. The handoff file lists the rewording, so fix both before showing the slides again.
+- **Missing flowchart nodes:** the flowchart doesn't yet show the advisor's two extensions as nodes.
+
+I also saved two facts to your notes: the official repo has no code, and you're preparing this update for Prof. Mukherjee.
+
+
+I also need to correct something I told you earlier. I said to run `python demo.py` once ahead of time to download the VGG weights. That was wrong: `demo.py` never touches the VGG loss. The only internet you need is the one-time `pip install` of PyTorch. The corrected version goes into the file.

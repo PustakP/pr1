@@ -1,0 +1,279 @@
+=== PAGE 1 ===
+All-Weather Image Restoration
+Improving DTMIR-Pro — Progress Update 2
+Pustak Pathak
+Advisor: Dr. Snehasis Mukherjee
+Project Update
+1 / 16
+
+=== PAGE 2 ===
+What This Update Covers
+1A quick recap of the plan and the three architectural changes
+2What wefixed in codeand how we kept the model
+parameter-efficient(GFLOPs)
+3CompleteB0–B4 ablation resultson SOTS (400 pairs) from our
+GPU run
+4Visual training curves (B0 curves.png–B4 curves.png) & key
+findings
+5Next steps: fixing continuous-code Stage-1 collapse & scaling to full
+300 epochs
+2 / 16
+
+=== PAGE 3 ===
+Quick Recap: What’s Wrong With DTMIR-Pro Today
+DTMIR-Pro (our baseline) works in two steps: it firsttranslatesa
+degraded image into a haze-look, a rain-look, and a snow-look version,
+thenrestoresthe clean image by routing only the single translated stream
+that looksleast similar(arg min cosine similarity) to the degraded input.
+Three weak points we identified:
+1 The translation step is trained once and thenfrozen— it never
+learns from how well the final restoration actually turns out.
+2 It can only describe an image as100% haze, 100% rain, or 100%
+snow— real photos are often a mix of these.
+3 Itthrows away two out of threetranslated versions and keeps only
+one, based on a rigid, non-trainable similarity rule (SBFR).
+3 / 16
+
+=== PAGE 4 ===
+The Big Picture: Our Improved Pipeline
+Degraded input photo
+Continuous weather “fingerprint”
+(replaces haze / rain / snow labels)
+Translation network
+now kept trainable, not frozen
+“Haze-look”
+version“Rain-look”
+version“Snow-look”
+version
+Soft blending of all three versions
+(replaces “pick only one” rule)
+Weather-combination block (MWF)(kept as-is)
+Restoration network
+Clean restored photoFuture:swap the attention block for MIRAGE’s conv+attn+MLP split Future:use SPD/BDG staged alignment as the routing scoreLearning signal now
+flows all the way back
+to the translation net-
+work
+4 / 16
+
+=== PAGE 5 ===
+How to Read the Flowchart
+Unchanged
+Parts of DTMIR-Pro
+we are keeping exactly
+as they are — they
+already work well.Modified
+An existing DTMIR-Pro
+part that we’re
+changing how it
+behaves (not replacing
+it entirely).Brand new
+A component that
+didn’t exist in
+DTMIR-Pro at all —
+newly added, inspired
+by another paper.
+Dashed red arrow:information that now flowsbackwardduring training
+(a “feedback loop”) — this did not exist in the original pipeline.
+Dashed gray boxes:the advisor’s two optional extensions, added asfuture
+nodes (MIRAGE backbone swap, SPD/BDG staged alignment) — not part of the
+current run.
+5 / 16
+
+=== PAGE 6 ===
+Change 1 — A “Fingerprint” Instead of a Label
+What it replaces:DTMIR-Pro tags every image with a rigid one-hot
+label: haze, rain,orsnow. Nothing in between.
+What we’re doing instead:Give every image a flexible, learned
+continuous description of its weather condition — more like a fingerprint
+than a checkbox. This lets the network say “this photo is somewhat rainy
+and somewhat hazy” instead of forcing a single choice.
+Where the idea comes from:The BDG paper (ICLR’26) uses a similar
+idea — instead of a fixed label for the type of damage in an image, it
+builds a rich, learned description of the damage and feeds that into its
+model. We’re borrowing that same philosophy for weather type.
+Why it matters:Real bad-weather photos are almost never purely one
+thing — a rainy evening often also looks hazy. A single label can’t capture
+that; a fingerprint can.
+6 / 16
+
+=== PAGE 7 ===
+Change 2 — Letting the Translator Learn From the
+Outcome
+What it replaces:In DTMIR-Pro, the part of the network that creates
+the haze/rain/snow versions of the image is trainedoncein Stage 1, then
+locked. The later restoration step can never tell it “you got that a bit
+wrong, adjust.”
+What we’re doing instead:Load the pretrained Stage-1 weights, but
+keep that part unlocked during Stage-2 training so the quality of the final
+restored photo sends gradient feedback backward to improve how the
+translations are made.
+Where the idea comes from:This isour own proposal. The reading-list
+papers gave us the general direction (they all re-use feedback across stages
+rather than trusting one frozen pass blindly), but none of them makes this
+exact change, so we are not attributing it to a specific paper.
+Why it matters:A part of the system that never learns from its own
+downstream mistakes is wasted potential — this closes that loop.
+7 / 16
+
+=== PAGE 8 ===
+Change 3 — Blending Instead of Picking One
+What it replaces:DTMIR-Pro’s SBFR looks at the three translated
+versions (haze/rain/snow look-alikes), measures which one looksleast like
+the original photo (arg min similarity), and keepsonly that one. The other
+two are thrown away completely.
+What we’re doing instead:Keep all three, assign each one a learned
+“how useful is this” weight via softmax, and blend them together instead
+of picking a single winner. The soft blending layer itself isour own design.
+Where the idea comes from:MIRAGE (ICLR’26) does not do stream
+routing, but it does propose acovariance (SPD) similaritybetween feature
+streams. That similarity idea is what we can borrow as therouting scorein
+a later step; the blend layer around it is ours.
+Why it matters:Throwing away two-thirds of your information on a rigid
+rule is wasteful, and the rule itself has no way to improve during training.
+8 / 16
+
+=== PAGE 9 ===
+What We Looked At but AreNotUsing Right Now
+Restora-FlowandEquS / EquS+both im-
+prove thegenerative sampling processof diffusion-
+or flow-matching-based restoration models.
+DTMIR-Pro’s restoration step is a direct, single-pass net-
+work — it isn’t a diffusion or flow model, so these two pa-
+pers’ core tricks don’t plug in without a much larger redesign.
+We’re parking them as a possiblefuturedi-
+rection, not using them in this update.
+This is intentional: it keeps the current update focused and realistic
+instead of combining every paper into one giant redesign.
+9 / 16
+
+=== PAGE 10 ===
+What We Fixed in Code This Update
+Stage-1 checkpoint now loads.train.pyno longer starts stage 2
+from a fresh translator — it loadstranslator pretrained.pt
+(with the weather embedding / projection), then freezes or fine-tunes
+as configured.
+Parameter budget matched to the paper.Baseline now sits at
+3.93M params(paper: 3.9M) by tuningbase channels=26,
+numscales=3.
+Library SSIM & VGG Perceptual Loss.Replaced hand-written
+SSIM withtorchmetricsand wired in VGG perceptual loss
+(--use-vgg 1) + PatchGAN discriminator for Stage 1.
+Restoration net corrected to match the paper.Re-reading the
+paper showed SBFR routes thelasttranslation-encoder layer (one
+feature map), upsampled into each decoder level next to three
+per-level MWF encoder branches (paper Eq. 8 and 11). Rewrote the
+restorer to match this exactly.
+Cleaner soft-router inputvia a small independent stem, replacing
+the old “reuse the translator encoder” shortcut.
+10 / 16
+
+=== PAGE 11 ===
+Parameter Efficiency & GFLOPs Comparison
+How We Restricted the Model to 3.93M Parameters:
+Channel & Scale Calibration:Bounding the network width tobase channels=26
+acrossnum scales=3keeps the multi-branch MWF encoder-decoder compact.
+Prompt-Conditioned Weight Sharing:Instead of three separate networks for
+Haze, Rain, and Snow, Stage 1 shares asingleencoder conditioned on a compact
+weather prompt; translation decoders are bypassed during Stage-2 inference
+(encode only).
+Minimal-Overhead Additions:Unfreezing the translator (Change 2) adds0
+parameters, while the continuous fingerprint MLP (Change 1) and soft-router
+stem (Change 3) use global pooling and 1×1 projections (<0.04M added
+params).
+Method Params (M)↓GFLOPs (2562)↓Architecture Type
+WeatherDiff (TPAMI’23) 82.96 295.80 Diffusion-based
+PromptIR (NeurIPS’23) 35.59 158.14 Transformer + Prompts
+Restormer (CVPR’22) 26.13 140.99 Multi-Dconv Transformer
+AirNet (CVPR’22) 8.93 301.20 Contrastive All-in-One
+DTMIR-Pro (WACV’26) 3.90 32.16Hard Routing + Frozen (B0)
+DTMIR-Pro+ (Ours, B1) 3.93 32.16Hard Routing +Trainable
+DTMIR-Pro+ (Ours, B3/B4) 3.93≈32.30Soft Routing + Trainable11 / 16
+
+=== PAGE 12 ===
+Completed Ablation Ladder on SOTS (summary.csv)
+Row Weather code Translator Routing PSNR (dB) SSIM Key Takeaway
+B0 (baseline) one-hot frozen hard 25.41 0.9443 Reproduction baseline
+B1 (Change 2) one-hot trainable hard 26.70 0.9556 +1.29 dB / +0.0113 SSIM
+B2 (Change 1) continuous frozen hard 5.04 0.0039 Unsupervised Stage-1 collapse
+B3 (Change 3) one-hot frozen soft 25.160.9454Higher SSIM than B0
+B4 (full) continuous trainable soft 9.82 0.2526 Unfrozen recovers +4.78 dB vs B2
+Analysis of Results (400-pair SOTS subset,256×256, VGG loss enabled):
+Change 2 (Unfreezing the Translator) is a clear winner (B1 vs. B0):Allowing
+restoration gradients to fine-tune the Stage-1 translator boosts PSNR by+1.29
+dB(25.41→26.70 dB) and SSIM to0.9556with zero extra parameters or
+GFLOPs at inference.
+Change 3 (Soft Routing) improves structure (B3 vs. B0):Soft blending
+achieves0.9454 SSIM(beating B0’s 0.9443), showing blended streams preserve
+structural detail well.
+How B4 recovers):Unfreezing the translator in B4 nearly doubles PSNR
+(5.04→9.82 dB), confirming Change 2 actively fights the bad Stage-1
+initialization.
+12 / 16
+
+=== PAGE 13 ===
+Training Curves Across the Ablation Ladder (B0–B4)
+B0: Baseline (25.41 dB)
+ B1: Trainable Trans. (26.70
+dB)
+B3: Soft Routing (25.16 dB)
+B2: Continuous Frozen (5.04 dB —
+Collapse)
+B4: Continuous Trainable (9.82 dB —
+Partial Recovery)
+13 / 16
+
+=== PAGE 14 ===
+What We Learned & Immediate Next Steps
+1. Fixing the Continuous Weather Fingerprint (B2 & B4):
+Root Cause:Inone-hotmode, Stage 1 knows which target domain
+(haze/rain/snow) to translate toward. Incontinuousmode without
+supervision, the embedding MLP has no anchor, collapsing Stage-1
+translation.
+Immediate Fix:Add a lightweightauxiliary cross-entropy
+supervision head(or initialize the continuous projection from the
+one-hot embedding basis) during Stage-1 pretraining, plus testB1 +
+B3(One-Hot + Trainable Translator + Soft Routing).
+2. Scaling to Full Benchmark Datasets:
+Bump schedule to the paper’s full100 Stage-1 / 300 Stage-2
+epochson the complete 5,000-image SOTS dataset (targeting the
+paper’s 36.92 dB / 0.981 reference) alongside realOutdoor-Rain
+(ORD)andComprehensive Snow (CSD)datasets.
+Run real-world unpaired evaluation (RTTS, RID, Snow-Realistic via
+NIQE / BRISQUE).
+14 / 16
+
+=== PAGE 15 ===
+Summary Table
+Change Replaces Inspired by Ablation Outcome
+(SOTS-400)
+Continuous
+weather finger-
+printFixed
+haze/rain/snow
+one-hot labelBDG
+(ICLR’26)Needs Stage-1 auxil-
+iary supervision to pre-
+vent stream collapse
+(B2: 5.04 dB)
+Unfrozen
+translatorFrozen, one-time-
+trained translatorOur own
+proposalBest result: +1.29
+dB PSNR (26.70
+dB) & 0.9556 SSIM
+over B0 (25.41 dB)
+Soft blending
+of streamsHard “pick one,
+discard two” ruleOwn design
+(+ MIRAGE
+SPD)Improves structural
+similarity (0.9454
+SSIMin B3 vs.
+0.9443 in B0)
+Considered but deferred: Restora-Flow, EquS/EquS+(both assume a
+diffusion/flow-based restorer, which DTMIR-Pro is not).
+15 / 16
+
+=== PAGE 16 ===
+Thank you — Questions / Discussion
+16 / 16

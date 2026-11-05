@@ -1,0 +1,13 @@
+# Small synthetic smoke test for stage 1 (translator pretraining)
+code_dim: 16
+base_channels: 26
+num_scales: 3
+weather_code: continuous
+freeze_translator: false
+routing: soft
+image_size: 64
+batch_size: 4
+lr: 1.0e-3
+epochs_translation: 3
+use_vgg_loss: false
+data_root: "data/synthetic/translation"

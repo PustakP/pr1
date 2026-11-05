@@ -1,0 +1,26 @@
+# Model architecture
+code_dim: 16
+base_channels: 26          # baseline config lands at ~3.93M params (paper: 3.9M)
+num_scales: 3
+
+# ---- Our three proposed changes, each independently toggleable ----
+# so we can measure baseline vs. each change vs. all changes together.
+
+weather_code: continuous     # "onehot" (DTMIR-Pro baseline) | "continuous" (ours)
+freeze_translator: false     # true (baseline) | false (ours, joint fine-tuning)
+routing: soft                 # "hard" (baseline SBFR) | "soft" (ours)
+
+# Training
+image_size: 256
+batch_size: 4
+lr: 1.0e-3
+epochs_translation: 100      # stage 1 (translator pretraining)
+epochs_restoration: 300      # stage 2 (restoration / joint fine-tuning)
+l1_weight: 1.0
+contrastive_weight: 0.75
+use_vgg_loss: true           # false avoids downloading VGG weights (smoke tests)
+
+# Data / logging
+data_root: "./data/sots"     # point at whichever dataset we start with
+val_split: 0.1
+checkpoint_every: 10

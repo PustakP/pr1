@@ -1,0 +1,995 @@
+=== PAGE 1 ===
+DTMIR-Pro: Domain Translation with Prompt-based Latent-Space
+Generalization for Multi-Weather Image Restoration
+Ashutosh Kulkarni1, Prashant W. Patil2, Santosh Kumar Vipparthi1,
+Subrahmanyam Murala3, and Balasubramanian Raman4
+1CVPR Lab, Indian Institute of Technology Ropar, Punjab, INDIA
+2Indian Institute of Technology Guwahati, Assam, INDIA
+3CVPR Lab, Trinity College Dublin, Ireland
+4Indian Institute of Technology Roorkee, Uttarakhand, INDIA
+ashutosh.20eez0008@iitrpr.ac.in
+Abstract
+Multi-weather image restoration seeks to recover scene vis-
+ibility under rainy, snowy, and hazy conditions, thereby
+enhancing high-level vision tasks. Existing methods typi-
+cally train on combined datasets with single-type weather
+degradations, limiting their generalization to real-world
+scenarios involving mixed degradations. Domain transla-
+tion has emerged as a viable solution by generating di-
+verse weather-degraded variants of the same scene. How-
+ever, current approaches require separate models for each
+degradation type, resulting in increased system complex-
+ity. To address this, we propose DTMIR-Pro, a prompt-
+based domain translation framework with latent space gen-
+eralization for multi-weather image restoration. A single
+trainable network performs multi-domain translation us-
+ing domain-adaptive prompts and dynamic kernel selec-
+tion via a proposed Dynamic Multi-Head Attention block
+to learn diverse degradation patterns. The restoration net-
+work takes translated outputs and employs a Multi-Weather
+Fusion Block with global-local feature streams to cap-
+ture complex degradations. Furthermore, we introduce a
+Similarity-Based Encoder Routing mechanism to transfer
+domain-specific features from the translation encoder to the
+restoration stage. Extensive experiments on both synthetic
+and real-world weather-degraded datasets demonstrate the
+effectiveness and generalizability of the proposed method.
+The code is made available athttps://github.com/
+AshutoshKulkarni4998/DTMIR-Pro.
+1. Introduction
+Surveillance applications involve several decisive tasks
+such as object detection [9], depth estimation [41], seman-
+tic segmentation [55],etc.Generally, it is assumed that
+the input data is clean enough for these tasks to main-
+Figure 1. Conceptual difference between the existing domain
+translation (DT) [40] and the proposed approach for multi-weather
+image restoration. [40] requires separate models, whereas the pro-
+posed method requires only one trainable model for multi-weather
+domain-translation.
+tain significant performance. However, in adverse weather
+scenarios, these tasks may perform sub-optimally as the
+input images are severely degraded with rainy, snowy or
+hazy artefacts, either individually or in a combined man-
+ner. Hence, restoring weather affected images is an impor-
+tant pre-requisite. Several approaches are available for gen-
+eralized weather degraded image restoration through sin-
+gle trainable models [5, 20, 24, 39, 40, 62]. These ap-
+proaches involved neural architecture search, by consider-
+ing weather-specific encoders and a generalized decoder
+[33]. Using such weather-specific encoders increases the
+overall computational complexity when handling the possi-
+This WACV paper is the Open Access version, provided by the Computer Vision Foundation.
+Except for this watermark, it is identical to the accepted version;
+the final published version of the proceedings is available on IEEE Xplore.
+3846
+
+
+=== PAGE 2 ===
+ble weather degradations. Further, there exist transformer
+based weather specific query learning [20] and knowledge
+distillation [5] approach through weather specific teacher
+networks. Recently, an approach with patch-based dif-
+fusion model [39] was proposed for multi-weather image
+restoration. However, these approaches require large num-
+ber of trainable parameters (KD [5] (28M), TW [20] (31M),
+WD [39] (110M)). Moreover, reliance of these methods
+on datasets containing combined images with individual
+weather degradation limits their performance on real-world
+weather degraded scenarios.
+A potential solution to this in the form of domain trans-
+lation was recently proposed [40].But, how domain
+translation is helpful?Multi-Weather restoration problem
+is divided into two sub-modules, i.e., domain translation
+followed by restoration. Domain translation is proposed
+to produce weather-degraded variants of the input. This
+makes the restoration network invariant to weather degra-
+dation, in turn generalizing it via combined learning of
+translated weather variants for multi-weather restoration.
+We propose a novel prompted generalized multi-domain
+translation approach for multi-weather image restoration
+(3.9M parameters) (see Fig. 1). Asingle trainable network
+is designed for multi-domain translation usingweather-
+coded promptsthat encode discriminative weather-specific
+cues to enable robust domain translation. To enhance fea-
+ture extraction, we introduce a dynamic attention block. For
+restoration, we proposesimilarity-based feature routing,
+which selects encoder features from the translation network
+based on the similarity between input and translated im-
+ages, guiding the restoration process. To handle compound
+degradations, we introduce a multi-weather feature fusion
+block that combines features from any two weather types
+at both global (semantic) and local levels. Compared to
+existing methods [40], our approach offers two key advan-
+tages: (i) a single trainable model replaces the need forN
+independently trained networks forNdegradations, and (ii)
+similarity-based routing eliminates the dependency on the
+input image, making the restoration network degradation-
+invariant. Our main contributions are summarized as:
+• The first prompted generalized light-weight multi-domain
+translation based approach for multi-weather degraded
+image restoration, having 1/3rdparameter (3.9M) com-
+pared to [40] (11M).
+• A novel similarity based feature routing approach for
+effectively utilizing the encoder features from domain-
+translation network to guide the multi-weather restoration
+network.
+• A dynamic attention block to extract robust features
+from input, and a multi-weather feature fusion block to
+learn combined weather degradations for holistic multi-
+weather image restoration.
+Thorough experimentation on synthetic and real-worldweather-degraded datasets evaluates the effectiveness of the
+proposed method over existing methods for multi-weather
+image restoration. We also explore the applicability of the
+proposed method on underwater image enhancement.
+2. Related Works
+2.1. Weather-specific Image Restoration
+De-hazing:Numerous methods have been proposed for im-
+age dehazing with [12] and without [18, 23, 25–27] prior
+information. Yehet al.[54] used structural and statistical
+feature learning for single-image dehazing. Liet al.[31]
+addressed over/under-dehazing via channel and spatial at-
+tention with skip connections. Fanet al.[14] proposed
+a residual attention mechanism with cross-connections us-
+ing paired depth maps. Recent unpaired learning ap-
+proaches [43, 53] integrate depth-density priors to improve
+restoration, though estimating accurate priors in dense haze
+remains challenging. Furthermore, haze varies widely in
+the real world, but existing methods often target limited or
+common haze types, lacking generalizability to diverse un-
+seen scenarios.
+De-raining:Rain detection followed by removal has been
+explored in [52], while Ahnet al.[1] introduced atten-
+tive gating to balance rain removal. Dilated convolutions
+with detail recovery were proposed in [11], and Zamiret
+al.[57] developed a progressive multi-stage pipeline. Wang
+et al.[49] used kernel-guided CNNs, and Huet al.[16]
+incorporated depth to jointly handle rain streaks and fog.
+Despite these advances, real-world scenarios often involve
+complex veiling effects, which remain challenging.
+De-snowing:Snow removal is particularly difficult due to
+snow’s non-transparent nature. Zhenget al.[60] proposed a
+multi-guided filter, while Wanget al.[48] used dictionary-
+based decomposition. Zhanget al.[59] leveraged semantic
+and depth priors, and Chenet al.[4] applied wavelet loss.
+Recent works [45, 46] explored invertible networks and do-
+main adaptation for improved realism.
+While these methods achieve strong results for specific
+degradations, they fail under complex weather conditions
+involving multiple factors, such as veiling effects, limiting
+their effectiveness in real-world multi-weather scenarios.
+2.2. Multi-Weather Image Restoration
+Earlier research focused on restoration of images with sin-
+gle weather degradation such as haze [28, 44], rain [7, 58]
+and snow [2, 36] removal. These single weather image
+restoration approaches perform better for a specific weather
+degradation, but the dire need of generalized algorithms
+led the researchers to propose multi-weather image restora-
+tion approaches [5, 20, 39, 62]. Valanarusuet al.[20]
+equipped learnable weather queries in the transformer net-
+work for decoder generalization. Chenet al.[5] distilled
+3847
+
+
+=== PAGE 3 ===
+Figure 2. Representation of the proposed prompt-based domain
+translation network.
+Figure 3. Illustration of the Weather Coded Prompt (WCP) block.
+knowledge from weather specific teacher networks to a uni-
+fied student network. Kulkarniet al.[24] utilized two-
+streamed approach for degradation removal and feature cor-
+rection. ¨Ozdenizciet al.[39] proposed a patch based
+diffusion model for multi-weather image restoration. Re-
+cently, [62] trained a network in two stages, where the first
+stage aims to learn weather specific features, and second
+stage learns the weather general features. Histoformer [47]
+employs histogram self-attention and dynamic-range con-
+volution to restore weather-degraded images by grouping
+similar-intensity pixels. It also uses Pearson correlation loss
+to preserve linear relationships with ground truth. However,
+these approaches require computationally complex mod-
+els for multi-weather image restoration with limited perfor-
+mance on real-world scenarios.
+2.3. Domain Translation and Prompt Learning
+Various methods have been developed for image-to-image
+domain translation. Early approaches, such as conditional
+GANs, CycleGAN [61], and DiscoGAN [22], preserve
+structural consistency using cycle-consistency loss. Star-
+GAN [10] enables multi-domain translation using a single
+generator with an auxiliary classifier. A recent method [40]
+extends this idea for image restoration via multiple indepen-
+dently trained domain translation networks, making the ap-
+proach computationally expensive and cumbersome. While
+these methods perform well in one-to-one mappings, they
+struggle with efficiency and generalization in multi-domain
+tasks due to the need for multiple generators. Single-
+GAN [56] addresses this by sharing a single model across
+domains. Building on this idea, we propose a generalizedmany-domain translation framework usingweather-coded
+prompts, eliminating the need for separate domain-specific
+networks [40].
+Recent advances in visual prompts have shown promise
+in vision tasks. PromptIR [42] applies prompts in decoder
+networks for low-level tasks. In contrast, we introduce
+visual prompts within the domain translation network to
+generalize across input weather domains.Key distinctions
+from [42] are discussed in the supplementary material.
+3. Proposed Approach
+In this section, we provide deep insight into the proposed
+approach for multi-weather image restoration which in-
+cludesa) Prompted Generalized Domain Translation(Fig-
+ure 2), andb) Multi-Weather Image Restoration.
+3.1. Prompted Generalized Weather Translation
+Existing method [40] trained separate models for different
+weather-translations, which is a cumbersome process and
+has higher computational requirements. To avoid this, we
+propose ageneralized domain translation solutionrequiring
+a single trainable model to translate image from any domain
+to its respective weather translated domains.
+Given an input imageI, we obtain its corresponding do-
+main translated images (I Haze ,IRain, andI Snow ). For this,
+we use the prompted encoder based architecture for weather
+translation as shown in Figure 2. The input (degraded) im-
+age is initially passed through a convolution layer to con-
+vert the image into features. These features are then further
+passed through a series of Weather Coded Prompters and
+downsampling operations to obtain the weather translation
+specific prompts at various scales. These weather coded
+prompts are then fused with the successive encoder features
+to guide the domain translation stage. Further, these en-
+coded features are passed through series of decoder blocks
+to obtain the domain translated images in accordance to
+weather coded prompts.
+3.1.1. Weather Coded Prompts:
+Input images may contain different weather degradations,
+and translating such inputs to the target domains in a gen-
+eralized manner requires feature adaptation. For enabling
+multi-weather translation using a single generator network,
+learnable weather prompts (P w) are fused with input fea-
+tures to modulate them in accordance to the weather code
+(w) provided. Please refer to Figure 3 for the illustration of
+weather coded prompt block.Weather promptsare train-
+able tensors that learn the arbitrary input domain informa-
+tion while optimizing domain translation network. In order
+to induce target specificity to the prompts, they are injected
+with weather codes. For easing the input adaptability, we
+make weather prompts attentively adapt to input weather
+degradations. This is done by extracting global weights
+3848
+
+
+=== PAGE 4 ===
+Figure 4. Overview of the proposed DTMIR-Pro architecture for multi-weather image restoration.
+from the input features to be multiplied with the weather
+prompt elements (P) as:
+Pw=σ(C 1×1(G(F in)))∗ P,(1)
+whereσis softmax activation,C 1×1 is convolution with
+kernel size1×1,Gis global average pooling,F inare the in-
+put features, and∗is elementwise multiplication. Weather
+code is a domain code formulated as a one-hot vector, sim-
+ilar to latent code utilized for denoting the attributes of the
+generated image. By manipulating this latent code, one can
+generate new data samples that share similar characteristics
+to the original data but may differ in certain aspects based
+on the variations encoded in the latent space. We have set
+the latent code as: [1, 0, 0] for haze, [0, 1, 0] for rain, and
+[0, 0, 1] for snow. For injecting these weather codes to the
+learnable weather prompts, we utilize the central biasing in-
+stance normalization (CBIN) [56] as:
+CBIN(P w) =Pw−E[P w]p
+V ar[P w]+tanh(f(w)),(2)
+wherefis a learnable affine transformation applied on the
+weather codew. Such fusion of weather codes and prompts
+enables target domain specific discriminative feature learn-
+ing, essential for translating the arbitrary input domain into
+its corresponding weather domains.
+3.1.2. Dynamic Attention Block:
+Feature extraction with maximum representation ability and
+efficiency play a vital role in domain translation. Further-
+more, transformer blocks have been proven effective in cap-
+turing long range dependencies, yet, traditional transformer
+architectures use single convolution kernel for query extrac-
+tion in the attention block. Such setting may restrict the net-
+work from extracting diverse features due to static kernels.
+Dynamic convolutions [8] perform attentive (dynamic) ag-
+gregation of parallel convolutions kernels, enabling the di-
+verse feature learning per layer. Hence, we propose the dy-
+namic convolutions (DynC) as query (Q d) extractors in thedynamic attention block as:
+DAtt(x) =x+σ(Q d·KT)·V,(3)
+Qd=ReLU(DynC(x)),(4)
+DynC=NX
+n=1πn(x)W n,(5)
+whereK=Cdepth
+3×3(x),V=Cdepth
+3×3(x)are keys and val-
+ues respectively for input featuresxextracted using depth-
+wise convolutions with kernel size 3×3 (Cdepth
+3×3 ),σ(·)is
+the softmax activation,π n(x)represents output of squeeze
+and excitation attention block [15] for generating the fea-
+ture attention weights in accordance to inputx, andW n,
+n∈[1, N]representnthconvolution kernel.More details
+about dynamic attention block are given in the supplemen-
+tary material.
+3.2. Multi-Weather Restoration
+Upon successful domain translation, the restoration stage
+takes translated images as input along with outputs
+from the proposedsimilarity based feature routing block
+(SBFR) (Sec. 3.2.1). Each domain translated image
+(IHaze,IRain,ISnow ) is processed through convolution lay-
+ers to extract featuresF H, FR, andF S. These are
+fused via the proposedmulti-weather fusion block(MWF)
+(Sec. 3.2.2) to obtain joint weather representations (e.g.,
+FHR,FRS,FHS). Each fused feature passes through en-
+coder layers comprising the proposed dynamic attention
+block (Sec. 3.1) and strided convolution, followed by con-
+catenation.
+The aggregated features are forwarded through convolu-
+tional and decoder layers, which include dynamic attention
+and transposed strided convolutions. At each level, MWF
+features are concatenated with SBFR features (E DT) for
+enhanced restoration. Skip connectionsF Skip i, i∈(1,2,3)
+are defined as:
+FSkip i=Conv 3×3(⟨EHRi, ERSi, EHSi,↑23−i(EDT)⟩),
+3849
+
+
+=== PAGE 5 ===
+Figure 5. Schematic of the proposed multi-weather fusion block
+consisting of weather fusion block (WFB) to fuse pairs of weather
+degradations.
+where↑ 2ndenotes transposed convolution with stride2n,
+and⟨·⟩indicates feature concatenation. The final restored
+image is obtained by passing the decoder output through a
+3-channel convolution layer.
+3.2.1. Similarity Based Feature Routing
+The domain translation network learns mappings from input
+to target weather domains using weather-coded prompts.
+Qualitative analysis (Fig. 7) and quantitative results (in
+supplementary material) reveal that the learned features ef-
+fectively suppress the input degradation while translating to
+the target domain.We leverage these prompted features in
+the restoration network to enhance performance.
+To avoid redundancy from processing the input image, as
+in [40], we proposesimilarity-based feature routing, which
+guides the restoration network using encoder features from
+the translation network. Given an input degraded imageI
+and its domain-translated variants (I Haze ,IRain,ISnow ),
+we compute the structural similarity (SSIM) betweenIand
+each translated image. The translation yielding themini-
+mum similarityis selected, implicitly indicating the domi-
+nant degradation inI.
+For example, ifIis a snowy image, its SSIM is typi-
+cally lowest with the hazy variant, i.e.,I Haze . Thus, fea-
+tures from the haze translation path (representing “snow
+removal–haze addition”) are routed to the restoration net-
+work. LetDT Edenote the last encoder layer of the domain
+translation network; the routed featuresSBFR Oare com-
+puted as:
+Si=SSIM(Y(I), Y(I i)),(6)
+j=Index(min([S i])), i∈ {Rain, Haze, Snow},(7)
+SBFR O=DT E(I, w j),(8)
+whereYdepicts Y-Channel output obtained after convert-
+ing RGB images into YCbCr images. This conversion is
+done because Y channel of an image contains discrimina-
+tive degradation information [13]. Therefore with the simi-larity based feature routing, the encoder features of weather
+translation network act as prompts themselves, for guiding
+the restoration network in accordance to input. Unlike [40],
+this further eliminates the need to use the actual input image
+in the restoration network, as we already have the domain-
+translated images and the similarity-based routed features.
+3.2.2. Multi-Weather Feature Fusion
+In real world scenarios, the images captured in adverse
+weather conditions may get affected by combined occur-
+rence of multiple weather degradations (such as rain + veil,
+snow + veil,etc). Hence, it is vital to effectively fuse the
+individual weather features to learn their combined effect.
+To achieve this, we propose a multi-weather feature fusion
+module (MWFF). The schematic of MWFF is presented in
+Figure 5. The main aim of MWFF is to fuse any pair of
+weather degradations, both in global (semantic) level and
+local level. The proposed MWFF consists of dedicated
+blocks for global and local level fusion. In global level fu-
+sion, the two weather features are passed throughFFT2d
+→Conv 1×1→IFFT2dto capture global receptive field.
+Further, for capturing the various sizes of weather degrada-
+tions (such as varying rain and snow sizes), and to fuse in-
+formation on a local-level, multi-scale gated depthwise con-
+volutions are used (please see Figure 5). The multi-scale
+gated depthwise convolutions are equipped with different
+kernel sizes. Such global and local fusion of features en-
+ables the restoration network to learn various combinations
+of weather degradations.The effectiveness of each proposed
+block is verified in ablation study (Sec. 4.5).
+4. Experiments and Analysis
+4.1. Training Details
+We follow the training datasets used in [40] for training
+the domain translation network, except the fact that [40]
+trains separate networks for each domain translation, we
+train our domain translation network in a unified manner.
+After training the domain translation network, we freeze its
+weights, and use its outputs for training the restoration net-
+work. The domain translation network is trained for 100
+epochs and restoration network is trained for 300 epochs.
+While training the translation and restoration networks, the
+initial learning rate is set to 10−3which is varied using co-
+sine annealing strategy. The weights of both the networks
+are updated on NVIDIA-GeForce GTX 1080 8GB GPU.
+The discriminator network is same as in [56].
+Domain Translation Loss Functions:The aim of the do-
+main translation network (DT) is learning mapping from
+input domain (I) to corresponding target domainsI i, i∈
+{Rain, Haze, Snow}given a weather code (w). The do-
+main translation network is trained adversarially having dis-
+criminator networksD i, i∈ {Rain, Haze, Snow}with
+3850
+
+
+=== PAGE 6 ===
+Figure 6. Qualitative results comparison of the proposed (Ours) and existing UMVR [24], TW [20], KD [5], WGWS [62], WD [39], DMIR
+[40] methods on real-world haze, rain, and snow degraded images (please zoom in for clearer view).
+Table 1. Quantitative results analysis on real-world datasets in
+terms of NIQE [37](↓), Entropy [6](↑), and BRISQUE [38](↓).
+Best and second best values are denoted inRedand Blue.
+Dataset Methods NIQE Entropy BRISQUE
+RTTSUMVR [24] 5.009 7.221 28.625
+KD [5] 4.996 7.297 26.837
+TW [20] 5.703 7.263 29.874
+WGWS [62] 6.199 7.064 35.715
+WD [39] 5.315 7.115 29.897
+PIR [42] 5.127 7.342 27.593
+Histoformer [47] 4.923 7.428 25.847
+DMIR [40] 4.859 7.505 24.761
+DTMIR-Pro 3.599 7.551 23.951
+RIDUMVR [24] 6.604 7.486 24.296
+KD [5] 6.943 7.459 24.841
+TW [20] 7.496 7.393 24.165
+WGWS [62] 6.813 7.348 24.862
+WD [39] 7.103 7.401 24.021
+PIR [42] 7.284 7.437 24.315
+Histoformer [47] 6.871 7.463 24.128
+DMIR [40] 7.625 7.492 23.931
+DTMIR-Pro 6.252 7.527 23.397
+Snow-
+RealisticUMVR [24] 4.296 7.354 23.761
+KD [5] 6.643 7.459 24.841
+TW [20] 5.628 7.331 25.377
+WGWS [62] 4.417 7.241 25.331
+WD [39] 4.342 7.324 23.996
+PIR [42] 4.573 7.398 22.847
+Histoformer [47] 4.285 7.541 22.163
+DMIR [40] 4.196 7.572 21.884
+DTMIR-Pro 3.668 7.617 20.125
+the training objective:
+LDTadv=X
+iE[log(D i(Ii))]+E[log(1−D i(DT(I, w i)))].
+(9)We calculate the contrastive loss [51] (CL DT) between the
+domain translated images. By enforcing a larger inter-
+distance between the translations, the contrastive loss helps
+ensure that the translated images retain distinct visual fea-
+tures associated with their respective weather conditions. In
+the context of weather degradations, this means preserving
+the semantic differences specific to each weather condition,
+such as haze, rain, or snow. This is done by considering
+the domain translated image as anchor, its weather degraded
+ground-truth as positive image, and the images from other
+translated domain as negatives. The total domain translation
+loss is defined as:
+LDTTotal=LDT∗λDT1+CL DT∗λDT2,(10)
+withλ DT1= 0.5andλ DT2= 1.0as weights assigned to
+domain translation losses.
+Multi-Weather Restoration Loss Functions:For multi-
+weather image restoration network, we utilize theL 1loss
+between the restored image and corresponding restoration
+ground truth. Further, we also calculate the contrastive loss
+(CLR) for obtaining perceptually clearer outputs consider-
+ing the restored image as anchor, the domain translated im-
+ages (I Haze,IRain,ISnow ) as negatives and the restoration
+ground truth as positive. Hence, the total restoration loss
+(LR) is calculated as:
+LR=L 1∗λR1+CL R∗λR2,(11)
+whereλ R1= 1.0, λ R2= 0.75are weights assigned to
+the image restoration losses.Detailed equations of the loss
+functions are given in supplementary material.
+4.2. Datasets
+1) SOTS Dataset [29]: We consider 5000 images from
+outdoor-haze train split and 500 outdoor images from test
+split for training and testing respectively.
+2) Outdoor Rain Dataset [32]: Comprising rainy images
+3851
+
+
+=== PAGE 7 ===
+Table 2. Quantitative results on synthetic datasets: SOTS (for haze
+removal), CSD (for snow+haze removal), and ORD (for rain+haze
+removal) in terms of PSNR [21]/SSIM [50].
+Methods SOTS CSD ORD
+UMVR [24] 33.41/0.980 28.65/0.900 22.99/0.830
+KD [5] 34.64/0.985 31.35/0.950 29.05/0.916
+WD [39] 28.00/0.966 26.85/0.935 29.72/0.921
+TW [20] 32.45/0.955 29.76/0.940 27.96/0.950
+WGWS [62] 31.31/0.970 28.42/0.925 25.31/0.900
+PIR [42] 30.58/0.974 28.95/0.938 30.80/0.923
+DMIR [40] 36.26/0.98732.95/0.942 31.24/0.951
+Histoformer [47] 33.15/0.962 30.48/0.928 32.08/0.938
+DTMIR-Pro 36.92/0.981 33.94/0.953 32.88/0.954
+with veiling effect, 9000 and 750 images from this dataset
+are used for training and testing respectively.
+3) Comprehensive Snow Dataset [3]: 8000 and 2000 im-
+ages are used for training and testing, respectively, with a
+combination of snow and fog degradation.
+Moreover, performance on real-world scenarios is evalu-
+ated using Real-world Task-driven Testing Set (RTTS) [29],
+Rain In Driving (RID) [34], and Snow-Realistic datasets
+[36] containing hazy, rainy, and snowy images respectively.
+4.3. Quantitative Results
+For performance evaluation, we compare results of the
+proposed method quantitatively on both synthetic and
+real-world datasets. We compare quantitative results
+on real-world datasets in terms of reference-free metrics
+such as Naturalness Image Quality Evaluator (NIQE) [37]
+(↓), Blind/Referenceless Image Spatial Quality Evaluator
+(BRISQUE) [38] (↓) and Entropy [6] (↑) (↓- lower is bet-
+ter,↑- higher is better) in Table 1. The quantitative analysis
+on synthetic datasets is provided in Table 2. For synthetic
+datasets, we use the peak signal-to-noise ratio (PSNR) [21]
+and structural similarity index (SSIM) [50] as evaluation
+metrics. As seen from the results, the proposed method out-
+performs the existing state-of-the-art methods.
+Parameter Analysis:Being a pre-processing step for
+higher-level computer vision applications, image restora-
+tion is expected to have low-computational overhead. Com-
+parison with existing methods in terms of trainable param-
+eters, model size, and floating point operations (GFLOPs)
+on image size256×256is given in Table 3. As seen from
+the values, the proposed method has lesser computational
+footprint as compared to existing methods.
+4.4. Qualitative Results
+Restoration Results:For visual analysis, we compare the
+results of the proposed method with the existing state-of-
+the-art methods (UMVR [24], KD [5], TW [20], WGWS
+[62], WD [39], DMIR [40]), on real-world datasets for
+multi-weather image restoration in Figure 6.More visual
+results on synthetic and real-world images are provided inTable 3. Comparison based on number of parameters, model size,
+and GFLOPs on image size256×256. Our parameters are given
+by considering the domain translation and restoration networks.
+Methods Par.(M) Size (MB) GFLOPs
+KD [5] 28M 348.89 49.22
+TW [20] 31M 148.77 12.24
+WD [39] 110M 1296.71 475.43
+PIR [42] 35.5M 397.51 158.15
+DMIR [40] 11M 44.01 100.14
+DTMIR-Pro 3.9M 15.76 28.60
+Figure 7. Ablation study visual results with different types of do-
+main translation settings (please zoom in for clearer view).
+the supplementary material.As seen from the results, the
+proposed method better enhances the perceptual quality of
+the image. For hazy images, the proposed method removes
+more distant (in-depth) haze as compared to existing meth-
+ods. For rainy and snowy images, the proposed method is
+able to remove more rain streaks and snow-streaks along
+with veiling effect. For cross domain analysis, we have
+also provided some results in night-time conditions in the
+supplementary materialby testing the proposed model di-
+rectly (without retraining for night-time restoration). This
+analysis verifies the generalizability of the proposed method
+across various weather degradations with consistently effec-
+tive restoration performance.
+We have provided qualitative results of domain transla-
+tion in the supplementary material.
+4.5. Ablation Studies
+To evaluate the effectiveness of the proposed method, we
+perform various ablation studies elaborated in this section.
+We provide the performance variations on SOTS (H), ORD
+(R) and CSD (S) datasets in terms of PSNR.
+Weather Coded Prompts:We evaluatewhether weather
+coded prompts help in effective input to domain translation
+as compared to just domain codes or prompts?This is ver-
+ified by comparing results when the latent space is manipu-
+3852
+
+
+=== PAGE 8 ===
+Table 4. Ablation study results in terms of PSNR on various abla-
+tion settings. H: SOTS, R: Outdoor Rain, S: CSD Dataset.
+Setting PSNR-H-R-S
+SBFR
+AblationNo Feature Routing 35.81/31.27/32.24
+Direct Feature Routing 36.24/31.95/33.12
+SBFR 36.92/32.88/33.94
+Attention
+Block
+AblationConvolution Attention 35.53/30.39/32.12
+Depthwise Conv. Attention 35.95/31.76/32.89
+Dynamic Attention 36.92/32.88/33.94
+Multi-
+Weather
+Fusion
+AblationNo Fusion 35.47/30.86/31.72
+Additive Fusion 35.68/31.12/32.18
+Concatenation 35.84/31.73/32.63
+Global Fusion 36.33/32.21/ 32.78
+Local Fusion 36.51/32.45/33.12
+MWF 36.92/32.88/33.94
+lated using only domain codes, prompts, and weather coded
+prompts. The visual results are provided in Figure 7. As
+seen from the results, the domain translated images gener-
+ated using the proposed weather coded prompts have better
+diversity and realistic-looking degradations when compared
+to other settings.
+Similarity Based Feature Routing (SBFR):SBFR is pro-
+posed to utilize domain translation features in restoration
+network to provide input domain guidance and avoid re-
+dundant feature processing. But,is the proposed similar-
+ity based feature routing really effective for multi-weather
+image restoration?Experimentation results reported in Ta-
+ble 4 verify that proposed SBFR performs better as com-
+pared to no routing (viz. restoration only using the domain
+translated images), and direct routing (viz. restoration using
+the encoder features obtained using “all-weather” domain
+code).Another ablation study on feature routing is provided
+in supplementary material.
+Dynamic Attention Block (DAB):DAB equipped with dy-
+namic kernels is proposed to learn diverse attentive features
+from the inputs. To analyse the performance of different
+attention that can be utilized in encoders and decoders, we
+perform various experiments. We use the traditional con-
+volution attention, depthwise convolution based attention,
+and the proposed dynamic attention. The results in Table 4
+suggest that the proposed dynamic attention achieves better
+restoration performance.
+Multi-Weather Feature Fusion (MWF):MWF aims at
+learning combinations of weather degradations beneficial
+for image restoration in real-world scenarios. To scruti-
+nizewhether the proposed MWF block is really favourable
+towards effective restoration, we perform different experi-
+ments. These experiments involve no feature fusion (direct
+encoding ofF H,FR, andF S), additive fusion, concatena-
+tion based fusion, local fusion, global fusion, and proposed
+MWF. Results in Table 4 verify that the fusion of multi-
+weather features using the proposed MWF turns out to be
+more effective.Please see the supplementary material for
+more ablation results.
+Figure 8. Underwater image enhancement analysis.Top Row: Do-
+main translation results of the proposed method,Bottom Row: Im-
+age restoration results comparison of the proposed method with
+existing TWIN [35], TOPAL [19], and SUIR [17] methods.
+Table 5. Quantitative results on UIEB dataset for underwater im-
+age enhancement.
+Methods TOPAL [19] TWIN [35] SUIR [17] Ours
+PSNR 21.95 22.30 24.59 25.17
+SSIM 0.902 0.880 0.901 0.918
+5. Applications of the Proposed Framework
+Underwater Image Enhancement:Underwater images
+exhibit diverse color degradations, making domain transla-
+tion a feasible solution for restoration. We train a domain
+translation network to convert colored underwater images
+into varicolored variants, followed by a restoration network
+trained on the UIEB dataset [30]. Qualitative results are
+shown in Figure 8, and quantitative results on UIEB in Table
+5. The proposed method outperforms existing approaches,
+highlighting its potential for broader restoration tasks.
+Restoration capability of any algorithm is utilized in
+many higher-level computer vision tasks as a preprocessing
+step.We have provided visual results on various such com-
+puter vision applications in the supplementary material.
+6. Conclusion
+In this paper, we introduced a novel domain translation
+with prompt based latent space generalization approach for
+multi-weather image restoration. We proposed a novel
+prompt based domain translation network for converting
+the input image from any arbitrary weather domain to its
+respective domain translated representatives. Dynamic at-
+tention block is proposed for capturing diverse features for
+effective domain translation and restoration. Further, we in-
+troduced a novel similarity based feature routing approach
+to collaborate the domain translation network with restora-
+tion network. Finally, multi-weather fusion block is pro-
+posed containing global fusion and local fusion branches
+to learn mixed-weather degradations. Substantial experi-
+ments on synthetic as well as real-world datasets demon-
+strated the effectiveness of the proposed DTMIR-Pro for
+multi-weather image restoration. We further demonstrated
+the applicability of our approach on different applications.
+Acknowledgement
+This work is supported by CRG/2022/006876,
+MoES/PAMC/DOM/04/2022 (E-12710), and TIHI-
+ITG202204. The authors would also like to thank all the
+members of CVPR Lab for their support on this work.
+3853
+
+
+=== PAGE 9 ===
+References
+[1] Namhyun Ahn, So Yeon Jo, and Suk-Ju Kang. Eagnet:
+Elementwise attentive gating network-based single image
+de-raining with rain simplification.IEEE Transactions on
+Circuits and Systems for Video Technology, 32(2):608–620,
+2021. 2
+[2] Wei-Ting Chen, Hao-Yu Fang, Jian-Jiun Ding, Cheng-Che
+Tsai, and Sy-Yen Kuo. Jstasr: Joint size and transparency-
+aware snow removal algorithm based on modified partial
+convolution and veiling effect removal. InComputer Vision–
+ECCV 2020: 16th European Conference, Glasgow, UK, Au-
+gust 23–28, 2020, Proceedings, Part XXI 16, pages 754–770.
+Springer, 2020. 2
+[3] Wei-Ting Chen, Hao-Yu Fang, Cheng-Lin Hsieh, Cheng-Che
+Tsai, I Chen, Jian-Jiun Ding, Sy-Yen Kuo, et al. All snow re-
+moved: Single image desnowing algorithm using hierarchi-
+cal dual-tree complex wavelet representation and contradict
+channel loss. InProceedings of the IEEE/CVF International
+Conference on Computer Vision, pages 4196–4205, 2021. 7
+[4] Wei-Ting Chen, Hao-Yu Fang, Cheng-Lin Hsieh, Cheng-Che
+Tsai, I Chen, Jian-Jiun Ding, Sy-Yen Kuo, et al. All snow re-
+moved: Single image desnowing algorithm using hierarchi-
+cal dual-tree complex wavelet representation and contradict
+channel loss. InProceedings of the IEEE/CVF International
+Conference on Computer Vision, pages 4196–4205, 2021. 2
+[5] Wei-Ting Chen, Zhi-Kai Huang, Cheng-Che Tsai, Hao-
+Hsiang Yang, Jian-Jiun Ding, and Sy-Yen Kuo. Learning
+multiple adverse weather removal via two-stage knowledge
+learning and multi-contrastive regularization: Toward a uni-
+fied model. In2022 IEEE/CVF Conference on Computer Vi-
+sion and Pattern Recognition (CVPR), pages 17632–17641,
+2022. 1, 2, 6, 7
+[6] Xiaoqiao Chen, Qingyi Zhang, Manhui Lin, Guangyi Yang,
+and Chu He. No-reference color image quality assessment:
+From entropy to perceptual quality.EURASIP Journal on
+Image and Video Processing, 2019(1):77, 2019. 6, 7
+[7] Xiang Chen, Hao Li, Mingqiang Li, and Jinshan Pan. Learn-
+ing a sparse transformer network for effective image derain-
+ing. InProceedings of the IEEE/CVF Conference on Com-
+puter Vision and Pattern Recognition (CVPR), pages 5896–
+5905, 2023. 2
+[8] Yinpeng Chen, Xiyang Dai, Mengchen Liu, Dongdong
+Chen, Lu Yuan, and Zicheng Liu. Dynamic convolu-
+tion: Attention over convolution kernels. InProceedings of
+the IEEE/CVF conference on computer vision and pattern
+recognition, pages 11030–11039, 2020. 4
+[9] Yunhua Chen, Weijie Bai, Qingkun Huang, and Jinsheng
+Xiao. Efficient motion symbol detection and multi-kernel
+learning for aer object recognition.IEEE Transactions on
+Cognitive and Developmental Systems, pages 1–1, 2021. 1
+[10] Yunjey Choi, Minje Choi, Munyoung Kim, Jung-Woo Ha,
+Sunghun Kim, and Jaegul Choo. Stargan: Unified genera-
+tive adversarial networks for multi-domain image-to-image
+translation. InProceedings of the IEEE conference on
+computer vision and pattern recognition, pages 8789–8797,
+2018. 3[11] Sen Deng, Mingqiang Wei, Jun Wang, Yidan Feng, Luming
+Liang, Haoran Xie, Fu Lee Wang, and Meng Wang. Detail-
+recovery image deraining via context aggregation networks.
+InProceedings of the IEEE/CVF conference on computer vi-
+sion and pattern recognition, pages 14560–14569, 2020. 2
+[12] Sobhan Kanti Dhara, Mayukh Roy, Debashis Sen, and Pra-
+bir Kumar Biswas. Color cast dependent image dehazing via
+adaptive airlight refinement and non-linear color balancing.
+IEEE Transactions on Circuits and Systems for Video Tech-
+nology, 31(5):2076–2081, 2020. 2
+[13] Akshay Dudhane and Subrahmanyam Murala. Ryf-net:
+Deep fusion network for single image haze removal.IEEE
+Transactions on Image Processing, 29:628–640, 2019. 5
+[14] Guodong Fan, Min Gan, Bi Fan, and CL Philip Chen. Mul-
+tiscale cross-connected dehazing network with scene depth
+fusion.IEEE Transactions on Neural Networks and Learn-
+ing Systems, 2022. 2
+[15] Jie Hu, Li Shen, and Gang Sun. Squeeze-and-excitation net-
+works. InProceedings of the IEEE conference on computer
+vision and pattern recognition, pages 7132–7141, 2018. 4
+[16] Xiaowei Hu, Lei Zhu, Tianyu Wang, Chi-Wing Fu, and
+Pheng-Ann Heng. Single-image real-time rain removal
+based on depth-guided non-local features.IEEE Transac-
+tions on Image Processing, 30:1759–1770, 2021. 2
+[17] Shirui Huang, Keyan Wang, Huan Liu, Jun Chen, and Yun-
+song Li. Contrastive semi-supervised learning for underwa-
+ter image restoration via reliable bank. InProceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, pages 18145–18155, 2023. 8
+[18] Tongyao Jia, Jiafeng Li, Li Zhuo, and Guoqiang Li. Effective
+meta-attention dehazing networks for vision-based outdoor
+industrial systems.IEEE Transactions on Industrial Infor-
+matics, 18(3):1511–1520, 2021. 2
+[19] Zhiying Jiang, Zhuoxiao Li, Shuzhou Yang, Xin Fan, and
+Risheng Liu. Target oriented perceptual adversarial fusion
+network for underwater image enhancement.IEEE Transac-
+tions on Circuits and Systems for Video Technology, 32(10):
+6584–6598, 2022. 8
+[20] Jeya Maria Jose Valanarasu, Rajeev Yasarla, and Vishal M.
+Patel. Transweather: Transformer-based restoration of im-
+ages degraded by adverse weather conditions. In2022
+IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), pages 2343–2353, 2022. 1, 2, 6, 7
+[21] Onur Keles ¸, M Akιn Yιlmaz, A Murat Tekalp, Cansu Ko-
+rkmaz, and Zafer Do ˘gan. On the computation of psnr for a
+set of images or video. In2021 Picture Coding Symposium
+(PCS), pages 1–5. IEEE, 2021. 7
+[22] Taeksoo Kim, Moonsu Cha, Hyunsoo Kim, Jung Kwon Lee,
+and Jiwon Kim. Learning to discover cross-domain rela-
+tions with generative adversarial networks. InInternational
+conference on machine learning, pages 1857–1865. PMLR,
+2017. 3
+[23] Ashutosh Kulkarni and Subrahmanyam Murala. Aerial im-
+age dehazing with attentive deformable transformers. InPro-
+ceedings of the IEEE/CVF winter conference on applications
+of computer vision, pages 6305–6314, 2023. 2
+[24] Ashutosh Kulkarni, Prashant W. Patil, Subrahmanyam Mu-
+rala, and Sunil Gupta. Unified multi-weather visibility
+3854
+
+
+=== PAGE 10 ===
+restoration.IEEE Transactions on Multimedia, pages 1–13,
+2022. 1, 3, 6, 7
+[25] Ashutosh Kulkarni, Shruti S Phutke, and Subrahmanyam
+Murala. Unified transformer network for multi-weather im-
+age restoration. InEuropean Conference on Computer Vi-
+sion, pages 344–360. Springer, 2022. 2
+[26] Ashutosh Kulkarni, Shruti S Phutke, Santosh Kumar Vip-
+parthi, and Subrahmanyam Murala. C2air: consolidated
+compact aerial image haze removal. InProceedings of the
+IEEE/CVF Winter Conference on Applications of Computer
+Vision, pages 749–758, 2024.
+[27] Ashutosh Kulkarni, Shruti S Phutke, Santosh Kumar Vip-
+parthi, and Subrahmanyam Murala. Multi-medium image
+enhancement with attentive deformable transformers.IEEE
+Transactions on Emerging Topics in Computational Intelli-
+gence, 2024. 2
+[28] Boyi Li, Xiulian Peng, Zhangyang Wang, Jizheng Xu, and
+Dan Feng. Aod-net: All-in-one dehazing network. InPro-
+ceedings of the IEEE international conference on computer
+vision, pages 4770–4778, 2017. 2
+[29] Boyi Li, Wenqi Ren, Dengpan Fu, Dacheng Tao, Dan Feng,
+Wenjun Zeng, and Zhangyang Wang. Benchmarking single-
+image dehazing and beyond.IEEE Transactions on Image
+Processing, 28(1):492–505, 2019. 6, 7
+[30] Chongyi Li, Chunle Guo, Wenqi Ren, Runmin Cong, Junhui
+Hou, Sam Kwong, and Dacheng Tao. An underwater image
+enhancement benchmark dataset and beyond.IEEE Trans-
+actions on Image Processing, 29:4376–4389, 2019. 8
+[31] Pengyue Li, Jiandong Tian, Yandong Tang, Guolin Wang,
+and Chengdong Wu. Deep retinex network for single im-
+age dehazing.IEEE Transactions on Image Processing, 30:
+1100–1115, 2020. 2
+[32] Ruoteng Li, Loong-Fah Cheong, and Robby T Tan. Heavy
+rain image restoration: Integrating physics model and condi-
+tional adversarial learning. InProceedings of the IEEE/CVF
+conference on computer vision and pattern recognition,
+pages 1633–1642, 2019. 6
+[33] Ruoteng Li, Robby T. Tan, and Loong-Fah Cheong. All
+in one bad weather removal using architectural search. In
+2020 IEEE/CVF Conference on Computer Vision and Pat-
+tern Recognition (CVPR), pages 3172–3182, 2020. 1
+[34] Siyuan Li, Iago Breno Araujo, Wenqi Ren, Zhangyang
+Wang, Eric K Tokuda, Roberto Hirata Junior, Roberto Cesar-
+Junior, Jiawan Zhang, Xiaojie Guo, and Xiaochun Cao. Sin-
+gle image deraining: A comprehensive benchmark analysis.
+InProceedings of the IEEE/CVF Conference on Computer
+Vision and Pattern Recognition, pages 3838–3847, 2019. 7
+[35] Risheng Liu, Zhiying Jiang, Shuzhou Yang, and Xin Fan.
+Twin adversarial contrastive learning for underwater image
+enhancement and beyond.IEEE Transactions on Image Pro-
+cessing, 31:4922–4936, 2022. 8
+[36] Yun-Fu Liu, Da-Wei Jaw, Shih-Chia Huang, and Jenq-Neng
+Hwang. Desnownet: Context-aware deep network for snow
+removal.IEEE Transactions on Image Processing, 27(6):
+3064–3073, 2018. 2, 7
+[37] Anish Mittal, Anush Krishna Moorthy, and Alan Conrad
+Bovik. No-reference image quality assessment in the spatialdomain.IEEE Transactions on image processing, 21(12):
+4695–4708, 2012. 6, 7
+[38] Anish Mittal, Rajiv Soundararajan, and Alan C Bovik. Mak-
+ing a “completely blind” image quality analyzer.IEEE Sig-
+nal processing letters, 20(3):209–212, 2012. 6, 7
+[39] Ozan ¨Ozdenizci and Robert Legenstein. Restoring vision in
+adverse weather conditions with patch-based denoising dif-
+fusion models.IEEE Transactions on Pattern Analysis and
+Machine Intelligence, 2023. 1, 2, 3, 6, 7
+[40] Prashant W. Patil, Sunil Gupta, Santu Rana, Svetha
+Venkatesh, and Subrahmanyam Murala. Multi-weather im-
+age restoration via domain translation. InProceedings of
+the IEEE/CVF International Conference on Computer Vision
+(ICCV), pages 21696–21705, 2023. 1, 2, 3, 5, 6, 7
+[41] Luigi Piccinelli, Christos Sakaridis, and Fisher Yu. idisc:
+Internal discretization for monocular depth estimation. In
+Proceedings of the IEEE/CVF Conference on Computer Vi-
+sion and Pattern Recognition (CVPR), pages 21477–21487,
+2023. 1
+[42] Vaishnav Potlapalli, Syed Waqas Zamir, Salman Khan, and
+Fahad Shahbaz Khan. Promptir: Prompting for all-in-one
+blind image restoration.arXiv preprint arXiv:2306.13090,
+2023. 3, 6, 7
+[43] Yuanjian Qiao, Mingwen Shao, Leiquan Wang, and Wang-
+meng Zuo. Learning depth-density priors for fourier-based
+unpaired image restoration.IEEE Transactions on Circuits
+and Systems for Video Technology, 2023. 2
+[44] Xu Qin, Zhilin Wang, Yuanchao Bai, Xiaodong Xie, and
+Huizhu Jia. Ffa-net: Feature fusion attention network for
+single image dehazing. InProceedings of the AAAI confer-
+ence on artificial intelligence, pages 11908–11915, 2020. 2
+[45] Yuhui Quan, Xiaoheng Tan, Yan Huang, Yong Xu, and Hui
+Ji. Image desnowing via deep invertible separation.IEEE
+Transactions on Circuits and Systems for Video Technology,
+2023. 2
+[46] Jingxu Ren, Gang Zhou, Yusen Zhu, Yangxin Liu, Juan
+Chen, and Zhenhong Jia. Unsupervised domain adaptive
+learning for image desnowing with real-world data. In2023
+IEEE International Conference on Image Processing (ICIP),
+pages 3050–3054. IEEE, 2023. 2
+[47] Shangquan Sun, Wenqi Ren, Xinwei Gao, Rui Wang, and
+Xiaochun Cao. Restoring images in adverse weather condi-
+tions via histogram transformer. InEuropean Conference on
+Computer Vision, pages 111–129. Springer, 2024. 3, 6, 7
+[48] Yinglong Wang, Shuaicheng Liu, Chen Chen, and Bing
+Zeng. A hierarchical approach for rain or snow removing
+in a single color image.IEEE Transactions on Image Pro-
+cessing, 26(8):3936–3950, 2017. 2
+[49] Ye-Tao Wang, Xi-Le Zhao, Tai-Xiang Jiang, Liang-Jian
+Deng, Yi Chang, and Ting-Zhu Huang. Rain streaks removal
+for single image via kernel-guided convolutional neural net-
+work.IEEE Transactions on Neural Networks and Learning
+Systems, 32(8):3664–3676, 2020. 2
+[50] Zhou Wang, Alan C Bovik, Hamid R Sheikh, and Eero P Si-
+moncelli. Image quality assessment: from error visibility to
+structural similarity.IEEE transactions on image processing,
+13(4):600–612, 2004. 7
+3855
+
+
+=== PAGE 11 ===
+[51] Haiyan Wu, Yanyun Qu, Shaohui Lin, Jian Zhou, Ruizhi
+Qiao, Zhizhong Zhang, Yuan Xie, and Lizhuang Ma. Con-
+trastive learning for compact single image dehazing. InPro-
+ceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition, pages 10551–10560, 2021. 6
+[52] Wenhan Yang, Robby T Tan, Jiashi Feng, Zongming Guo,
+Shuicheng Yan, and Jiaying Liu. Joint rain detection and
+removal from a single image with contextualized deep net-
+works.IEEE transactions on pattern analysis and machine
+intelligence, 42(6):1377–1393, 2019. 2
+[53] Yang Yang, Chaoyue Wang, Risheng Liu, Lin Zhang, Xiao-
+jie Guo, and Dacheng Tao. Self-augmented unpaired image
+dehazing via density and depth decomposition. InProceed-
+ings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition, pages 2037–2046, 2022. 2
+[54] Chia-Hung Yeh, Chih-Hsiang Huang, and Li-Wei Kang.
+Multi-scale deep residual learning-based single image haze
+removal via image decomposition.IEEE Transactions on
+Image Processing, 29:3153–3167, 2019. 2
+[55] Dewei Yi, Hui Fang, Yining Hua, Jinya Su, Mohammed
+Quddus, and Jungong Han. Improving synthetic to realis-
+tic semantic segmentation with parallel generative ensembles
+for autonomous urban driving.IEEE Transactions on Cog-
+nitive and Developmental Systems, pages 1–1, 2021. 1
+[56] Xiaoming Yu, Xing Cai, Zhenqiang Ying, Thomas Li,
+and Ge Li. Singlegan: Image-to-image translation by a
+single-generator network using multiple generative adversar-
+ial learning. InComputer Vision–ACCV 2018: 14th Asian
+Conference on Computer Vision, Perth, Australia, December
+2–6, 2018, Revised Selected Papers, Part V 14, pages 341–
+356. Springer, 2019. 3, 4, 5
+[57] Syed Waqas Zamir, Aditya Arora, Salman Khan, Munawar
+Hayat, Fahad Shahbaz Khan, Ming-Hsuan Yang, and Ling
+Shao. Multi-stage progressive image restoration. InPro-
+ceedings of the IEEE/CVF conference on computer vision
+and pattern recognition, pages 14821–14831, 2021. 2
+[58] He Zhang and Vishal M Patel. Density-aware single image
+de-raining using a multi-stream dense network. InProceed-
+ings of the IEEE conference on computer vision and pattern
+recognition, pages 695–704, 2018. 2
+[59] Kaihao Zhang, Rongqing Li, Yanjiang Yu, Wenhan Luo, and
+Changsheng Li. Deep dense multi-scale network for snow
+removal using semantic and depth priors.IEEE Transactions
+on Image Processing, 30:7419–7431, 2021. 2
+[60] Xianhui Zheng, Yinghao Liao, Wei Guo, Xueyang Fu, and
+Xinghao Ding. Single-image-based rain and snow removal
+using multi-guided filter. InInternational conference on neu-
+ral information processing, pages 258–265. Springer, 2013.
+2
+[61] Jun-Yan Zhu, Taesung Park, Phillip Isola, and Alexei A
+Efros. Unpaired image-to-image translation using cycle-
+consistent adversarial networks. InProceedings of the IEEE
+international conference on computer vision, pages 2223–
+2232, 2017. 3
+[62] Yurui Zhu, Tianyu Wang, Xueyang Fu, Xuanyu Yang, Xin
+Guo, Jifeng Dai, Yu Qiao, and Xiaowei Hu. Learn-
+ing weather-general and weather-specific features for imagerestoration under multiple adverse weather conditions. In
+Proceedings of the IEEE/CVF Conference on Computer Vi-
+sion and Pattern Recognition, pages 21747–21758, 2023. 1,
+2, 3, 6, 7
+3856

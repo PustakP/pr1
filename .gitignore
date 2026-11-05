@@ -1,0 +1,42 @@
+# Archives & Compressed Files
+*.zip
+*.tar
+*.gz
+*.rar
+*.7z
+
+# PyTorch weights & checkpoints
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.onnx
+runs/
+
+# Python cache & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+ENV/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Editor & Tooling
+.vscode/
+.idea/
+.commandcode/
+*.swp
+*.swo
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Logs
+*.log
